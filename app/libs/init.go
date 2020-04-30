@@ -1,10 +1,3 @@
-/*
-* File:    init.go
-* Created: 2020-04-30 16:07
-* Authors: MS geek.snail@qq.com
-* Copyright (c) 2013 - 2020 虾游网络科技有限公司 版权所有
- */
-
 package libs
 
 import (

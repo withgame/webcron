@@ -1,10 +1,11 @@
 package models
 
 import (
+	"net/url"
+
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 	_ "github.com/go-sql-driver/mysql"
-	"net/url"
 )
 
 func Init() {
