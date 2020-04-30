@@ -2,15 +2,18 @@ package jobs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/ioutil"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime/debug"
 	"strings"
 	"time"
 
+	"webcron/app/libs"
 	"webcron/app/mail"
 	"webcron/app/models"
 
@@ -110,7 +113,8 @@ func NewJobFromTask(task *models.Task) (*Job, error) {
 	if task.Id < 1 {
 		return nil, fmt.Errorf("ToJob: 缺少id")
 	}
-	job := NewCommandJob(task.Id, task.TaskName, task.Command)
+	//job := NewCommandJob(task.Id, task.TaskName, task.Command)
+	job := NewCommandJobFromTask(task)
 	job.task = task
 	job.Concurrent = task.Concurrent == 1
 	return job, nil
@@ -145,32 +149,42 @@ func NewCommandJobFromTask(task *models.Task) *Job {
 			cmdCleanStr := strings.Replace(task.Command, "\r", "", -1)
 			cmdSplitArr := strings.Split(cmdCleanStr, "\n")
 			if len(cmdSplitArr) > 1 {
-				bufOut := new(bytes.Buffer)
-				bufErr := new(bytes.Buffer)
 				var (
-					err       error
 					isTimeout bool
+					outStrs   = make([]string, 0, 0)
+					errStrs   = make([]string, 0, 0)
+					errorsStr = make([]string, 0, 0)
 				)
 				for _, cmdStr := range cmdSplitArr {
 					if len(cmdStr) == 0 {
 						continue
 					}
-					bufOut = new(bytes.Buffer)
-					bufErr = new(bytes.Buffer)
+					bufOut := new(bytes.Buffer)
+					bufErr := new(bytes.Buffer)
 					cmd := exec.Command("/bin/bash", "-c", cmdStr)
 					cmd.Stdout = bufOut
 					cmd.Stderr = bufErr
-					cmd.Start()
+					err := cmd.Start()
+					if err != nil {
+						errorsStr = append(errorsStr, err.Error())
+						continue
+					}
 					err, isTimeout = runCmdWithTimeout(cmd, timeout)
+					errorsStr = append(errorsStr, err.Error())
+					outStrs = append(outStrs, bufOut.String())
+					errStrs = append(errStrs, bufErr.String())
 				}
-				return bufOut.String(), bufErr.String(), err, isTimeout
+				return strings.Join(outStrs, ","), strings.Join(errStrs, ","), errors.New(strings.Join(errorsStr, ",")), isTimeout
 			} else {
 				bufOut := new(bytes.Buffer)
 				bufErr := new(bytes.Buffer)
 				cmd := exec.Command("/bin/bash", "-c", task.Command)
 				cmd.Stdout = bufOut
 				cmd.Stderr = bufErr
-				cmd.Start()
+				err := cmd.Start()
+				if err != nil {
+					return "", "", err, false
+				}
 				err, isTimeout := runCmdWithTimeout(cmd, timeout)
 				return bufOut.String(), bufErr.String(), err, isTimeout
 			}
@@ -191,6 +205,9 @@ func NewCommandJobFromTask(task *models.Task) *Job {
 				}
 			}
 			resp, err := req.DoRequest()
+			if err != nil {
+				return "", "", err, false
+			}
 			defer resp.Body.Close()
 			respByteArr, _ := ioutil.ReadAll(resp.Body)
 			isTimeout := false
@@ -227,7 +244,7 @@ func (j *Job) Run() {
 
 	defer func() {
 		if err := recover(); err != nil {
-			beego.Error(err, "\n", string(debug.Stack()))
+			beegoLog.Error("errRecover", err, "\n", string(debug.Stack()))
 		}
 	}()
 
@@ -284,7 +301,11 @@ func (j *Job) Run() {
 			return
 		}
 
-		var title string
+		var (
+			title         string
+			receiverEmail string
+			receiverName  string
+		)
 
 		data := make(map[string]interface{})
 		data["task_id"] = j.task.Id
@@ -305,14 +326,82 @@ func (j *Job) Run() {
 			data["status"] = "成功"
 		}
 
-		content := new(bytes.Buffer)
-		mailTpl.Execute(content, data)
+		//content := new(bytes.Buffer)
+		//mailTpl.Execute(content, data)
+		//ccList := make([]string, 0)
+		//if j.task.NotifyEmail != "" {
+		//	ccList = strings.Split(j.task.NotifyEmail, "\n")
+		//}
+		//if !mail.SendMail(user.Email, user.UserName, title, content.String(), ccList) {
+		//	beegoLog.Error("发送邮件超时：", user.Email)
+		//}
 		ccList := make([]string, 0)
 		if j.task.NotifyEmail != "" {
 			ccList = strings.Split(j.task.NotifyEmail, "\n")
+			receiverEmail = ccList[0]
+			if len(ccList) > 0 {
+				ccList = ccList[1:]
+			}
+			receiverEmailArr := strings.Split(ccList[0], "@")
+			receiverName = receiverEmailArr[0]
+			data["username"] = receiverName
 		}
-		if !mail.SendMail(user.Email, user.UserName, title, content.String(), ccList) {
-			beego.Error("发送邮件超时：", user.Email)
+		data["brief"] = j.task.Description
+		data["attach"] = ""
+		content := new(bytes.Buffer)
+		if libs.IsPathExist(j.task.NotifyEmailAttach) && libs.GetFilesize(j.task.NotifyEmailAttach) > mail.EMailAttachSize {
+			attachFileName := libs.GetFilename(j.task.NotifyEmailAttach)
+			saveKey := fmt.Sprintf("upload/webcron/%s", attachFileName)
+			achivePwd := libs.GetTarOrZipPassword(j.task.Command)
+			privateAccess := true
+			if len(achivePwd) > 0 {
+				privateAccess = false
+			}
+			accessUrl, errUpload := libs.SaveToQiniu(j.task.NotifyEmailAttach, saveKey, privateAccess)
+			if errUpload == nil {
+				data["attach"] = accessUrl
+				if (len(achivePwd)) > 0 {
+					data["pwd"] = achivePwd
+					mailAttachWihtPwdTpl.Execute(content, data)
+				} else {
+					mailAttachTpl.Execute(content, data)
+				}
+			} else {
+				mailTpl.Execute(content, data)
+			}
+			if !mail.SendMail(receiverEmail, receiverName, title, content.String(), ccList) {
+				beegoLog.Error("发送邮件超时：", user.Email)
+			}
+		} else {
+			mailTpl.Execute(content, data)
+			if !mail.SendMailWithAttach(title, content.String(), j.task.NotifyEmailAttach, ccList) {
+				beegoLog.Error("发送邮件超时：", user.Email)
+			}
+		}
+		if libs.IsPathExist(j.task.NotifyEmailAttach) {
+			os.Remove(j.task.NotifyEmailAttach)
 		}
 	}
+	if j.task.TotalTimes > 0 && j.task.ExecuteTimes >= j.task.TotalTimes {
+		j.task.Status = models.TaskStatus_END
+		j.task.Update()
+		RemoveJob(j.id)
+	}
+}
+
+func isPathExist(path string) bool {
+	_, err := os.Stat(path)
+	if err != nil {
+		// glog.Info(err)
+		return false
+	}
+	return true
+}
+
+func getFilesize(path string) int64 {
+	fileinfo, err := os.Stat(path)
+	if err == nil {
+		return fileinfo.Size()
+	}
+	return 0
 }

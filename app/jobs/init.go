@@ -2,13 +2,22 @@ package jobs
 
 import (
 	"fmt"
-	"github.com/astaxie/beego"
-	"webcron/app/models"
 	"os/exec"
 	"time"
+
+	"webcron/app/models"
+
+	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 )
 
+var beegoLog = logs.NewLogger(10000)
+
 func InitJobs() {
+	err := beegoLog.SetLogger("file", `{"filename":"logs/test.log"}`)
+	if err != nil {
+		panic(err)
+	}
 	list, _ := models.TaskGetList(1, 1000000, "status", 1)
 	for _, task := range list {
 		job, err := NewJobFromTask(task)
