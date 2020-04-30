@@ -3,17 +3,26 @@ package jobs
 import (
 	"bytes"
 	"fmt"
-	"github.com/astaxie/beego"
-	"github.com/lisijie/webcron/app/mail"
-	"github.com/lisijie/webcron/app/models"
 	"html/template"
+	"io/ioutil"
+	"net/url"
 	"os/exec"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"webcron/app/mail"
+	"webcron/app/models"
+
+	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/httplib"
 )
 
-var mailTpl *template.Template
+var (
+	mailTpl              *template.Template
+	mailAttachTpl        *template.Template
+	mailAttachWihtPwdTpl *template.Template
+)
 
 func init() {
 	mailTpl, _ = template.New("mail_tpl").Parse(`
@@ -27,6 +36,54 @@ func init() {
 执行时间：{{.start_time}}<br />
 执行耗时：{{.process_time}}秒<br />
 执行状态：{{.status}}
+</p>
+<p>-------------以下是任务执行输出-------------</p>
+<p>{{.output}}</p>
+<p>
+--------------------------------------------<br />
+本邮件由系统自动发出，请勿回复<br />
+如果要取消邮件通知，请登录到系统进行设置<br />
+</p>
+`)
+
+	mailAttachTpl, _ = template.New("mail_tpl").Parse(`
+	你好 {{.username}}，<br/>
+
+<p>以下是任务执行结果：</p>
+
+<p>
+任务ID：{{.task_id}}<br/>
+任务名称：{{.task_name}}<br/>       
+执行时间：{{.start_time}}<br />
+执行耗时：{{.process_time}}秒<br />
+执行状态：{{.status}}<br />
+备注：{{.brief}}<br />
+附件有效: 30分钟<br />
+附件地址: {{.attach}}
+</p>
+<p>-------------以下是任务执行输出-------------</p>
+<p>{{.output}}</p>
+<p>
+--------------------------------------------<br />
+本邮件由系统自动发出，请勿回复<br />
+如果要取消邮件通知，请登录到系统进行设置<br />
+</p>
+`)
+
+	mailAttachWihtPwdTpl, _ = template.New("mail_tpl").Parse(`
+	你好 {{.username}}，<br/>
+
+<p>以下是任务执行结果：</p>
+
+<p>
+任务ID：{{.task_id}}<br/>
+任务名称：{{.task_name}}<br/>       
+执行时间：{{.start_time}}<br />
+执行耗时：{{.process_time}}秒<br />
+执行状态：{{.status}}<br />
+备注：{{.brief}}<br />
+解压密码: {{.pwd}}<br />
+附件地址: {{.attach}}
 </p>
 <p>-------------以下是任务执行输出-------------</p>
 <p>{{.output}}</p>
@@ -74,6 +131,74 @@ func NewCommandJob(id int, name string, command string) *Job {
 		err, isTimeout := runCmdWithTimeout(cmd, timeout)
 
 		return bufOut.String(), bufErr.String(), err, isTimeout
+	}
+	return job
+}
+
+func NewCommandJobFromTask(task *models.Task) *Job {
+	job := &Job{
+		id:   task.Id,
+		name: task.TaskName,
+	}
+	if task.TaskType == models.TaskType_CMD {
+		job.runFunc = func(timeout time.Duration) (string, string, error, bool) {
+			cmdCleanStr := strings.Replace(task.Command, "\r", "", -1)
+			cmdSplitArr := strings.Split(cmdCleanStr, "\n")
+			if len(cmdSplitArr) > 1 {
+				bufOut := new(bytes.Buffer)
+				bufErr := new(bytes.Buffer)
+				var (
+					err       error
+					isTimeout bool
+				)
+				for _, cmdStr := range cmdSplitArr {
+					if len(cmdStr) == 0 {
+						continue
+					}
+					bufOut = new(bytes.Buffer)
+					bufErr = new(bytes.Buffer)
+					cmd := exec.Command("/bin/bash", "-c", cmdStr)
+					cmd.Stdout = bufOut
+					cmd.Stderr = bufErr
+					cmd.Start()
+					err, isTimeout = runCmdWithTimeout(cmd, timeout)
+				}
+				return bufOut.String(), bufErr.String(), err, isTimeout
+			} else {
+				bufOut := new(bytes.Buffer)
+				bufErr := new(bytes.Buffer)
+				cmd := exec.Command("/bin/bash", "-c", task.Command)
+				cmd.Stdout = bufOut
+				cmd.Stderr = bufErr
+				cmd.Start()
+				err, isTimeout := runCmdWithTimeout(cmd, timeout)
+				return bufOut.String(), bufErr.String(), err, isTimeout
+			}
+		}
+	} else if task.TaskType == models.TaskType_HTTP {
+		job.runFunc = func(timeout time.Duration) (string, string, error, bool) {
+			commandUri, _ := url.Parse(task.Command)
+			params := commandUri.Query()
+			notifyUrlStr := fmt.Sprintf("%s://%s%s", commandUri.Scheme, commandUri.Host, commandUri.EscapedPath())
+			req := httplib.Post(notifyUrlStr)
+			if len(params) > 0 {
+				for k, m := range params {
+					if len(m) > 0 {
+						for _, v := range m {
+							req.Param(k, v)
+						}
+					}
+				}
+			}
+			resp, err := req.DoRequest()
+			defer resp.Body.Close()
+			respByteArr, _ := ioutil.ReadAll(resp.Body)
+			isTimeout := false
+			if resp.StatusCode == 408 {
+				isTimeout = true
+			}
+			return string(respByteArr), resp.Status, err, isTimeout
+		}
 	}
 	return job
 }

@@ -3,9 +3,9 @@ package controllers
 import (
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/utils"
-	"github.com/lisijie/webcron/app/jobs"
-	"github.com/lisijie/webcron/app/libs"
-	"github.com/lisijie/webcron/app/models"
+	"webcron/app/jobs"
+	"webcron/app/libs"
+	"webcron/app/models"
 	"runtime"
 	"strconv"
 	"strings"
@@ -49,6 +49,7 @@ func (this *MainController) Index() {
 		row["ouput_size"] = libs.SizeFormat(float64(len(v.Output)))
 		row["output"] = beego.Substr(v.Output, 0, 100)
 		row["status"] = v.Status
+		row["tstatus"] = task.Status
 		recentLogs[k] = row
 	}
 

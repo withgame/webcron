@@ -1,11 +1,13 @@
 package controllers
 
 import (
-	"github.com/astaxie/beego"
-	"github.com/lisijie/webcron/app/libs"
-	"github.com/lisijie/webcron/app/models"
 	"strconv"
 	"strings"
+
+	"webcron/app/libs"
+	"webcron/app/models"
+
+	"github.com/astaxie/beego"
 )
 
 const (
@@ -54,10 +56,11 @@ func (this *BaseController) auth() {
 			}
 		}
 	}
-
-	if this.userId == 0 && (this.controllerName != "main" ||
-		(this.controllerName == "main" && this.actionName != "logout" && this.actionName != "login")) {
-		this.redirect(beego.URLFor("MainController.Login"))
+	if this.controllerName != "api" {
+		if this.userId == 0 && (this.controllerName != "main" ||
+			(this.controllerName == "main" && this.actionName != "logout" && this.actionName != "login")) {
+			this.redirect(beego.URLFor("MainController.Login"))
+		}
 	}
 }
 

@@ -1,14 +1,16 @@
 package controllers
 
 import (
-	"github.com/astaxie/beego"
-	libcron "github.com/lisijie/cron"
-	"github.com/lisijie/webcron/app/jobs"
-	"github.com/lisijie/webcron/app/libs"
-	"github.com/lisijie/webcron/app/models"
 	"strconv"
 	"strings"
 	"time"
+
+	libcron "github.com/lisijie/cron"
+	"webcron/app/jobs"
+	"webcron/app/libs"
+	"webcron/app/models"
+
+	"github.com/astaxie/beego"
 )
 
 type TaskController struct {
@@ -360,4 +362,17 @@ func (this *TaskController) Run() {
 	job.Run()
 
 	this.redirect(beego.URLFor("TaskController.ViewLog", "id", job.GetLogId()))
+}
+
+func executeImmediately(task *models.Task) (err error) {
+	job, err := jobs.NewJobFromTask(task)
+	if err != nil {
+		return
+	}
+
+	if jobs.AddJob(task.CronSpec, job) {
+		task.Status = 1
+		task.Update()
+	}
+	return
 }

@@ -2,9 +2,10 @@ package mail
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/utils"
-	"time"
 )
 
 var (
