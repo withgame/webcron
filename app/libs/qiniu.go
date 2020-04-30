@@ -1,10 +1,3 @@
-/*
-* File:    qiniu.go
-* Created: 2019-01-07 16:53
-* Authors: MS geek.snail@qq.com
-* Copyright (c) 2013 - 2019 青木文化传播有限公司 版权所有
- */
-
 package libs
 
 import (
