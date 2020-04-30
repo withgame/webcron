@@ -35,7 +35,7 @@
 
 	$ mysql -u username -p -D webcron < install.sql
 
-Supvervisor 部署守护进程时，SHELL类型任务的环境变量获取有问题。待解决
+Supervisor 部署守护进程时，SHELL类型任务的环境变量获取有问题。待解决
 
 运行
 	
