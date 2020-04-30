@@ -70,6 +70,12 @@
 						<span>任务管理</span>
 					</a>    				
 				</li>
+                <li {{if  eq .curController "ends" }}class="active"{{end}}>
+                    <a href="/ends/list">
+                        <i class="icon-list-alt"></i>
+                        <span>结束的任务</span>
+                    </a>
+                </li>
 				<li {{if eq .curController "group"}}class="active"{{end}}>					
 					<a href="/group/list">
 						<i class="icon-folder-close"></i>
