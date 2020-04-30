@@ -31,8 +31,9 @@
 				<span class="icon-bar"></span>
 			</a>
 			<a class="brand" href="/">
-				<span class="icon-time"></span> {{.siteName}}				
-			</a>		
+				<span class="icon-time"></span> {{.siteName}}
+			</a>
+            <a class="brand version" target="_blank" href="https://github.com/withgame/webcron" style="font-size: 12px;float: left;display: inline-block;line-height: 25px;height: 20px;margin-left: -30px;">{{.version}}</a>
 			<div class="nav-collapse">
 				<ul class="nav pull-right">
 					<li class="dropdown">						
@@ -102,11 +103,9 @@
 		<div class="container">
 			<div class="row">
     			<div class="span7">
-    				&copy; 2015-2016 <a href="http://www.lisijie.org">lisijie.org</a>.
+    				&copy; {{.startYear}}-{{.year}} <a href="{{.copylink}}">{{.copyname}}</a>.
     			</div>
-			<div class="span5" id="server-time" style="text-align:right">
-    				
-    			</div>
+			<div class="span5" id="server-time" style="text-align:right"></div>
     		</div> <!-- /row -->
 		</div> <!-- /container -->
 	</div> <!-- /footer-inner -->

@@ -3,9 +3,11 @@ package controllers
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"webcron/app/libs"
 	"webcron/app/models"
+	"webcron/cmd/version"
 
 	"github.com/astaxie/beego"
 )
@@ -32,7 +34,11 @@ func (this *BaseController) Prepare() {
 	this.actionName = strings.ToLower(actionName)
 	this.auth()
 
-	this.Data["version"] = beego.AppConfig.String("version")
+	this.Data["version"] = version.BinBuildVersion
+	this.Data["copylink"] = copyLink
+	this.Data["copyname"] = copyName
+	this.Data["year"] = time.Now().Year()
+	this.Data["startYear"] = copyStartYear
 	this.Data["siteName"] = beego.AppConfig.String("site.name")
 	this.Data["curRoute"] = this.controllerName + "." + this.actionName
 	this.Data["curController"] = this.controllerName
