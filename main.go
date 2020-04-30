@@ -22,7 +22,7 @@ func main() {
 	version.BinBuildCommit = c
 	version.BinBuildVersion = v
 	version.BinBuildDate = d
-	root := cobra.Command{Use: "webcron cmd, include server or version"}
+	root := cobra.Command{Use: "webcron cmd, include server and version"}
 	root.AddCommand(
 		server.Cmd,
 		version.Cmd,
